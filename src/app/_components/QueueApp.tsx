@@ -12,6 +12,7 @@ import type { FlightType } from '@/types/queue'
 
 export default function QueueApp() {
   const [modalOpen, setModalOpen] = useState(false)
+  const [hasJoined, setHasJoined] = useState(false)
   const {
     waitingQueue,
     nowFlying,
@@ -30,6 +31,7 @@ export default function QueueApp() {
     if (!nowFlying) {
       await startNextFlight()
     }
+    setHasJoined(true)
   }, [joinQueue, nowFlying, startNextFlight])
 
   const handleFlightEnd = useCallback(async () => {
@@ -131,21 +133,36 @@ export default function QueueApp() {
           </motion.button>
         )}
 
-        <motion.button
-          whileTap={{ scale: 0.97 }}
-          onClick={() => setModalOpen(true)}
-          className="flex items-center justify-center gap-2.5 py-4 rounded-2xl font-bold text-base cursor-pointer flex-[3]"
-          style={{
-            background: 'linear-gradient(135deg, #1e3a6e, #2a4d8f)',
-            border: '1px solid rgba(201,168,76,0.35)',
-            color: 'white',
-            borderRadius: '20px',
-            boxShadow: '0 4px 24px rgba(42,77,143,0.4)',
-          }}
-        >
-          <PlaneTakeoff className="w-5 h-5" style={{ color: 'var(--gold)' }} />
-          הגעתי — הצטרף לתור
-        </motion.button>
+        {!hasJoined && (
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setModalOpen(true)}
+            className="flex items-center justify-center gap-2.5 py-4 rounded-2xl font-bold text-base cursor-pointer flex-[3]"
+            style={{
+              background: 'linear-gradient(135deg, #1e3a6e, #2a4d8f)',
+              border: '1px solid rgba(201,168,76,0.35)',
+              color: 'white',
+              borderRadius: '20px',
+              boxShadow: '0 4px 24px rgba(42,77,143,0.4)',
+            }}
+          >
+            <PlaneTakeoff className="w-5 h-5" style={{ color: 'var(--gold)' }} />
+            הגעתי — הצטרף לתור
+          </motion.button>
+        )}
+        {hasJoined && (
+          <div
+            className="flex items-center justify-center gap-2 py-4 rounded-2xl text-sm flex-[3]"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: 'rgba(255,255,255,0.35)',
+              borderRadius: '20px',
+            }}
+          >
+            ✓ אתה בתור
+          </div>
+        )}
       </div>
 
       <JoinModal
