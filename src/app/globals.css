@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+:root {
+  --navy-950: #020917;
+  --navy-900: #0a1628;
+  --navy-800: #0f2040;
+  --navy-700: #152a54;
+  --navy-600: #1e3a6e;
+  --navy-500: #2a4d8f;
+  --gold:     #c9a84c;
+  --gold-light: #e8c878;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--navy-950);
+  color: #f0f4ff;
+  font-family: 'Inter', system-ui, sans-serif;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--navy-900); }
+::-webkit-scrollbar-thumb { background: var(--navy-600); border-radius: 2px; }
+
+.glass {
+  background: rgba(15, 32, 64, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-bright {
+  background: rgba(30, 58, 110, 0.5);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(201,168,76,0.3); }
+  50%       { box-shadow: 0 0 40px rgba(201,168,76,0.6); }
+}
+
+.glow-gold { animation: pulse-glow 2s ease-in-out infinite; }

@@ -1,0 +1,15 @@
+export type FlightType = 'independent' | 'shared' | 'both'
+export type EntryStatus = 'waiting' | 'flying' | 'done'
+
+export interface QueueEntry {
+  id: string
+  name: string
+  flight_type: FlightType
+  duration_min: number
+  position: number
+  status: EntryStatus
+  is_active: boolean
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+}
