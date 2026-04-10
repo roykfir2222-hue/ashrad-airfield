@@ -145,18 +145,36 @@ export function useQueue() {
   }, [nowFlying, supabase, fetchQueue])
 
   const startNextFlight = useCallback(async () => {
-    if (waitingQueue.length === 0) return
+    // Query fresh from DB — avoids stale React state after a just-completed insert
+    const { data: freshWaiting } = await supabase
+      .from('queue_entries')
+      .select('*')
+      .eq('is_active', true)
+      .eq('status', 'waiting')
+      .order('position', { ascending: true })
 
-    let nextEntry = waitingQueue[0]
-    if (nowFlying && nextEntry.name === nowFlying.name && waitingQueue.length > 1) {
-      nextEntry = waitingQueue[1]
+    if (!freshWaiting || freshWaiting.length === 0) return
+
+    const { data: freshFlying } = await supabase
+      .from('queue_entries')
+      .select('name')
+      .eq('is_active', true)
+      .eq('status', 'flying')
+      .maybeSingle()
+
+    let nextEntry = freshWaiting[0]
+    // No-consecutive rule: skip if same name as current flyer
+    if (freshFlying && nextEntry.name === freshFlying.name && freshWaiting.length > 1) {
+      nextEntry = freshWaiting[1]
     }
 
     await supabase
       .from('queue_entries')
       .update({ status: 'flying', started_at: new Date().toISOString() })
       .eq('id', nextEntry.id)
-  }, [waitingQueue, nowFlying, supabase])
+
+    await fetchQueue()
+  }, [supabase, fetchQueue])
 
   return {
     queue,
