@@ -12,7 +12,9 @@ import type { FlightType } from '@/types/queue'
 
 export default function QueueApp() {
   const [modalOpen, setModalOpen] = useState(false)
-  const [hasJoined, setHasJoined] = useState(false)
+  // Track whether this session has joined, and which entry ID belongs to them
+  const [myEntryId, setMyEntryId] = useState<string | null>(null)
+
   const {
     waitingQueue,
     nowFlying,
@@ -27,17 +29,26 @@ export default function QueueApp() {
   } = useQueue()
 
   const handleJoin = useCallback(async (name: string, type: FlightType, duration: number) => {
-    await joinQueue(name, type, duration)
+    // joinQueue now returns the new entry's id and immediately re-fetches
+    const id = await joinQueue(name, type, duration)
+    setMyEntryId(id)
     if (!nowFlying) {
       await startNextFlight()
     }
-    setHasJoined(true)
   }, [joinQueue, nowFlying, startNextFlight])
+
+  const handleLeave = useCallback(async () => {
+    if (!myEntryId) return
+    await leaveQueue(myEntryId)
+    setMyEntryId(null)
+  }, [myEntryId, leaveQueue])
 
   const handleFlightEnd = useCallback(async () => {
     await advanceFlight()
     await startNextFlight()
   }, [advanceFlight, startNextFlight])
+
+  const hasJoined = myEntryId !== null
 
   return (
     <div className="min-h-dvh flex flex-col" style={{ background: 'var(--navy-950)' }}>
@@ -113,13 +124,18 @@ export default function QueueApp() {
         <div className="h-24" />
       </main>
 
-      <div className="fixed bottom-6 inset-x-4 flex gap-3 max-w-2xl mx-auto z-30" style={{ left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 2rem)', maxWidth: '40rem' }}>
-        {nowFlying && (
+      {/* FAB row */}
+      <div
+        className="fixed bottom-6 flex gap-3 z-30"
+        style={{ left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 2rem)', maxWidth: '40rem' }}
+      >
+        {/* "יצאתי" — visible for the whole session after joining */}
+        {hasJoined && (
           <motion.button
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => leaveQueue(nowFlying.id)}
+            onClick={handleLeave}
             className="flex items-center justify-center gap-2 px-5 py-4 rounded-2xl font-semibold text-sm cursor-pointer flex-1"
             style={{
               background: 'rgba(239,68,68,0.15)',
@@ -133,7 +149,8 @@ export default function QueueApp() {
           </motion.button>
         )}
 
-        {!hasJoined && (
+        {/* "הגעתי" — hidden once joined, replaced with status indicator */}
+        {!hasJoined ? (
           <motion.button
             whileTap={{ scale: 0.97 }}
             onClick={() => setModalOpen(true)}
@@ -149,8 +166,7 @@ export default function QueueApp() {
             <PlaneTakeoff className="w-5 h-5" style={{ color: 'var(--gold)' }} />
             הגעתי — הצטרף לתור
           </motion.button>
-        )}
-        {hasJoined && (
+        ) : (
           <div
             className="flex items-center justify-center gap-2 py-4 rounded-2xl text-sm flex-[3]"
             style={{

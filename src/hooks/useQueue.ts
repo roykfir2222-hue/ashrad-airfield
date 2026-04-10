@@ -6,17 +6,13 @@ import type { QueueEntry, FlightType } from '@/types/queue'
 
 const BUFFER_MINUTES = 20
 const SHARED_DURATION = 12
-const INDEPENDENT_RATIO = 2 // every 2 independent → 1 shared
+const INDEPENDENT_RATIO = 2
 
-/** Build the scheduled queue from DB rows with the 2:1 ratio rule */
 export function buildScheduledQueue(active: QueueEntry[]): QueueEntry[] {
-  // Sort by position (DB-side ordering)
   return [...active].sort((a, b) => a.position - b.position)
 }
 
-/** Determine the flight type for the NEXT slot according to the 2:1 rule */
 export function nextSlotType(queue: QueueEntry[]): FlightType {
-  // Count consecutive independent slots since last shared
   let indepSinceShared = 0
   for (let i = queue.length - 1; i >= 0; i--) {
     if (queue[i].flight_type === 'shared') break
@@ -43,7 +39,6 @@ export function useQueue() {
     setLoading(false)
   }, [supabase])
 
-  // Real-time subscription
   useEffect(() => {
     fetchQueue()
 
@@ -62,13 +57,12 @@ export function useQueue() {
   const nowFlying = queue.find(e => e.status === 'flying') ?? null
   const waitingQueue = queue.filter(e => e.status === 'waiting')
 
-  /** Add a new user to the queue */
+  /** Add a new user to the queue. Returns the new entry's id. */
   const joinQueue = useCallback(async (
     name: string,
     flightType: FlightType,
     durationMin: number
-  ) => {
-    // Get max position
+  ): Promise<string> => {
     const { data: maxRow } = await supabase
       .from('queue_entries')
       .select('position')
@@ -79,17 +73,28 @@ export function useQueue() {
 
     const nextPos = (maxRow?.position ?? 0) + 1
 
-    await supabase.from('queue_entries').insert({
-      name,
-      flight_type: flightType,
-      duration_min: flightType === 'shared' ? SHARED_DURATION : durationMin,
-      position: nextPos,
-      status: 'waiting',
-      is_active: true,
-    })
-  }, [supabase])
+    const { data, error } = await supabase
+      .from('queue_entries')
+      .insert({
+        name,
+        flight_type: flightType,
+        duration_min: flightType === 'shared' ? SHARED_DURATION : durationMin,
+        position: nextPos,
+        status: 'waiting',
+        is_active: true,
+      })
+      .select('id')
+      .single()
 
-  /** Mark user as 'Left' — full removal from system */
+    if (error || !data) throw new Error(error?.message ?? 'Insert failed')
+
+    // Immediately refresh local state — don't wait for the realtime event
+    await fetchQueue()
+
+    return data.id as string
+  }, [supabase, fetchQueue])
+
+  /** Remove a user from the system (self or social delete) */
   const leaveQueue = useCallback(async (id: string) => {
     await supabase
       .from('queue_entries')
@@ -97,7 +102,6 @@ export function useQueue() {
       .eq('id', id)
   }, [supabase])
 
-  /** Social delete — any user can remove someone not present */
   const socialDelete = useCallback(async (id: string) => {
     await supabase
       .from('queue_entries')
@@ -105,21 +109,17 @@ export function useQueue() {
       .eq('id', id)
   }, [supabase])
 
-  /** Advance queue: mark current flyer as done, re-queue them at end (unless shared),
-   *  start next pilot (respecting no-consecutive rule) */
   const advanceFlight = useCallback(async () => {
     if (!nowFlying) return
 
     const isShared = nowFlying.flight_type === 'shared'
     const now = new Date().toISOString()
 
-    // Mark current as done (deactivate)
     await supabase
       .from('queue_entries')
       .update({ is_active: false, status: 'done', finished_at: now })
       .eq('id', nowFlying.id)
 
-    // Re-queue if not shared
     if (!isShared) {
       const { data: maxRow } = await supabase
         .from('queue_entries')
@@ -141,15 +141,12 @@ export function useQueue() {
       })
     }
 
-    // Start next pilot (skip consecutive same-user, skip shared until ratio met)
     await fetchQueue()
   }, [nowFlying, supabase, fetchQueue])
 
-  /** Mark next in waiting as flying */
   const startNextFlight = useCallback(async () => {
     if (waitingQueue.length === 0) return
 
-    // No consecutive: skip if same name as nowFlying
     let nextEntry = waitingQueue[0]
     if (nowFlying && nextEntry.name === nowFlying.name && waitingQueue.length > 1) {
       nextEntry = waitingQueue[1]
