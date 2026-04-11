@@ -1,23 +1,23 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { PlaneTakeoff, Users, LogOut, ShieldAlert } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { PlaneTakeoff, Users, LogOut } from 'lucide-react'
 import { Header } from '@/components/Header'
 import { NowFlying } from '@/components/NowFlying'
 import { QueueList } from '@/components/QueueList'
 import { JoinModal } from '@/components/JoinModal'
+import { SafetyModal } from '@/components/SafetyModal'
 import { useQueue } from '@/hooks/useQueue'
 import type { FlightType } from '@/types/queue'
 
 export default function QueueApp() {
-  const [modalOpen, setModalOpen] = useState(false)
+  const [joinModalOpen, setJoinModalOpen] = useState(false)
+  const [safetyModalOpen, setSafetyModalOpen] = useState(false)
   const [myEntryId, setMyEntryId] = useState<string | null>(null)
-  const [showSafetyMessage, setShowSafetyMessage] = useState(false)
 
-  const prevNowFlyingIdRef = useRef<string | null>(null)
   const ttsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const ttsAnnouncedRef = useRef<string | null>(null) // tracks which nowFlying id we already announced for
+  const ttsAnnouncedRef = useRef<string | null>(null)
 
   const {
     waitingQueue,
@@ -34,54 +34,37 @@ export default function QueueApp() {
     SHARED_DURATION,
   } = useQueue()
 
-  // Derive whether the current user is verified from live queue state
+  // Derive whether current session's user is verified
   const isCurrentUserVerified =
     myEntryId !== null &&
     (
-      // Check waiting queue
       waitingQueue.some(e => e.id === myEntryId && e.is_verified) ||
-      // Check if they're the active flyer (always verified)
       nowFlying?.id === myEntryId
     )
 
-  // Show safety message when it becomes the user's turn to fly
-  useEffect(() => {
-    const currentFlyingId = nowFlying?.id ?? null
-    if (
-      currentFlyingId === myEntryId &&
-      myEntryId !== null &&
-      prevNowFlyingIdRef.current !== currentFlyingId
-    ) {
-      setShowSafetyMessage(true)
-      const timer = setTimeout(() => setShowSafetyMessage(false), 7000)
-      return () => clearTimeout(timer)
-    }
-    prevNowFlyingIdRef.current = currentFlyingId
-  }, [nowFlying, myEntryId])
-
-  // 2-minute TTS warning for the next person in queue
+  // 2-minute TTS warning for the next verified person in queue
   useEffect(() => {
     if (ttsTimeoutRef.current) {
       clearTimeout(ttsTimeoutRef.current)
       ttsTimeoutRef.current = null
     }
 
-    if (!nowFlying?.started_at || waitingQueue.length === 0) return
+    if (!nowFlying?.started_at) return
+    const nextVerified = waitingQueue.find(e => e.is_verified)
+    if (!nextVerified) return
 
-    const nextPerson = waitingQueue[0]
     const flightEnd = new Date(nowFlying.started_at).getTime() + nowFlying.duration_min * 60 * 1000
     const bufferEnd = flightEnd + BUFFER_MINUTES * 60 * 1000
     const warningTime = bufferEnd - 2 * 60 * 1000
     const delay = warningTime - Date.now()
-    const announcementKey = `${nowFlying.id}-${nextPerson.id}`
+    const announcementKey = `${nowFlying.id}-${nextVerified.id}`
 
-    // Skip if already announced for this same flight+person combo, or if time already passed
     if (delay <= 0 || ttsAnnouncedRef.current === announcementKey) return
 
     ttsTimeoutRef.current = setTimeout(() => {
       ttsAnnouncedRef.current = announcementKey
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(`${nextPerson.name}, עוד 2 דקות תורך`)
+        const utterance = new SpeechSynthesisUtterance(`${nextVerified.name}, עוד 2 דקות תורך`)
         utterance.lang = 'he-IL'
         window.speechSynthesis.speak(utterance)
       }
@@ -95,6 +78,8 @@ export default function QueueApp() {
   const handleJoin = useCallback(async (name: string, type: FlightType, duration: number) => {
     const id = await joinQueue(name, type, duration)
     setMyEntryId(id)
+    // Show safety modal right after join
+    setSafetyModalOpen(true)
     if (!nowFlying) {
       await startNextFlight()
     }
@@ -118,42 +103,20 @@ export default function QueueApp() {
     await startNextFlight()
   }, [nowFlying, myEntryId, finishMyFlight, startNextFlight])
 
+  // Remove the currently active flyer and promote the next verified person
+  const handleRemoveFlyer = useCallback(async () => {
+    if (!nowFlying) return
+    await leaveQueue(nowFlying.id)
+    if (nowFlying.id === myEntryId) setMyEntryId(null)
+    await startNextFlight()
+  }, [nowFlying, myEntryId, leaveQueue, startNextFlight])
+
   const hasJoined = myEntryId !== null
   const isMyFlight = nowFlying?.id === myEntryId
 
   return (
     <div className="min-h-dvh flex flex-col" style={{ background: 'var(--navy-950)' }}>
       <Header />
-
-      {/* Safety message toast */}
-      <AnimatePresence>
-        {showSafetyMessage && (
-          <motion.div
-            key="safety"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            className="fixed top-20 left-1/2 z-50 w-full max-w-sm px-4"
-            style={{ transform: 'translateX(-50%)' }}
-          >
-            <div
-              className="flex items-center gap-3 px-4 py-3 rounded-2xl"
-              style={{
-                background: 'rgba(30,58,110,0.95)',
-                border: '1px solid rgba(201,168,76,0.5)',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-                backdropFilter: 'blur(12px)',
-              }}
-            >
-              <ShieldAlert className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--gold)' }} />
-              <p className="text-white text-sm font-medium text-right" style={{ direction: 'rtl' }}>
-                נא לשמור על כללי הבטיחות, הטסה נעימה
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <main className="flex-1 w-full max-w-2xl mx-auto px-4 py-6 space-y-6">
 
@@ -168,6 +131,7 @@ export default function QueueApp() {
             onFlightEnd={handleFlightEnd}
             isMyFlight={isMyFlight}
             onFinishFlight={handleFinishFlight}
+            onRemoveFlyer={handleRemoveFlyer}
           />
         </motion.section>
 
@@ -256,7 +220,7 @@ export default function QueueApp() {
         {!hasJoined ? (
           <motion.button
             whileTap={{ scale: 0.97 }}
-            onClick={() => setModalOpen(true)}
+            onClick={() => setJoinModalOpen(true)}
             className="flex items-center justify-center gap-2.5 py-4 rounded-2xl font-bold text-base cursor-pointer flex-[3]"
             style={{
               background: 'linear-gradient(135deg, #1e3a6e, #2a4d8f)',
@@ -284,10 +248,17 @@ export default function QueueApp() {
         )}
       </div>
 
+      {/* Join setup modal */}
       <JoinModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        open={joinModalOpen}
+        onClose={() => setJoinModalOpen(false)}
         onJoin={handleJoin}
+      />
+
+      {/* Safety modal — shown immediately after joining */}
+      <SafetyModal
+        open={safetyModalOpen}
+        onClose={() => setSafetyModalOpen(false)}
       />
     </div>
   )

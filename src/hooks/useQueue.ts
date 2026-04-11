@@ -201,11 +201,13 @@ export function useQueue() {
   }, [supabase, fetchQueue])
 
   const startNextFlight = useCallback(async () => {
+    // Only verified users can be promoted — pending users stay in place until verified
     const { data: freshWaiting } = await supabase
       .from('queue_entries')
       .select('*')
       .eq('is_active', true)
       .eq('status', 'waiting')
+      .eq('is_verified', true)
       .order('position', { ascending: true })
 
     if (!freshWaiting || freshWaiting.length === 0) return

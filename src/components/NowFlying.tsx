@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plane, Clock, Users, User, CheckCircle } from 'lucide-react'
+import { Plane, Clock, Users, User, CheckCircle, UserX } from 'lucide-react'
 import type { QueueEntry } from '@/types/queue'
 
 interface NowFlyingProps {
@@ -11,9 +11,17 @@ interface NowFlyingProps {
   onFlightEnd: () => void
   isMyFlight: boolean
   onFinishFlight: () => void
+  onRemoveFlyer: () => void
 }
 
-export function NowFlying({ entry, bufferMinutes, onFlightEnd, isMyFlight, onFinishFlight }: NowFlyingProps) {
+export function NowFlying({
+  entry,
+  bufferMinutes,
+  onFlightEnd,
+  isMyFlight,
+  onFinishFlight,
+  onRemoveFlyer,
+}: NowFlyingProps) {
   const [secondsLeft, setSecondsLeft] = useState(0)
   const [phase, setPhase] = useState<'flying' | 'buffer' | 'idle'>('idle')
 
@@ -97,19 +105,40 @@ export function NowFlying({ entry, bufferMinutes, onFlightEnd, isMyFlight, onFin
             </span>
           </div>
 
-          {phase !== 'idle' && (
-            <div
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold"
-              style={{
-                background: phase === 'flying' ? 'rgba(201,168,76,0.2)' : 'rgba(234,179,8,0.15)',
-                border: `1px solid ${phase === 'flying' ? 'rgba(201,168,76,0.4)' : 'rgba(234,179,8,0.3)'}`,
-                color: phase === 'flying' ? 'var(--gold-light)' : '#fde047',
-              }}
-            >
-              <Clock className="w-3 h-3" />
-              {formatTime(secondsLeft)}
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {phase !== 'idle' && (
+              <div
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold"
+                style={{
+                  background: phase === 'flying' ? 'rgba(201,168,76,0.2)' : 'rgba(234,179,8,0.15)',
+                  border: `1px solid ${phase === 'flying' ? 'rgba(201,168,76,0.4)' : 'rgba(234,179,8,0.3)'}`,
+                  color: phase === 'flying' ? 'var(--gold-light)' : '#fde047',
+                }}
+              >
+                <Clock className="w-3 h-3" />
+                {formatTime(secondsLeft)}
+              </div>
+            )}
+
+            {/* Remove active flyer button — always visible when someone is flying */}
+            {entry && phase === 'flying' && (
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={onRemoveFlyer}
+                className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer"
+                style={{
+                  background: 'rgba(239,68,68,0.15)',
+                  border: '1px solid rgba(239,68,68,0.35)',
+                  color: '#f87171',
+                }}
+                aria-label="הסר את הטייס הנוכחי"
+                title="הסר טייס"
+              >
+                <UserX className="w-4 h-4" />
+              </motion.button>
+            )}
+          </div>
         </div>
 
         {/* Main content */}
@@ -144,7 +173,7 @@ export function NowFlying({ entry, bufferMinutes, onFlightEnd, isMyFlight, onFin
                 </div>
               </div>
 
-              {/* "סיימתי להטיס" button — only for the active flyer during flight */}
+              {/* "סיימתי להטיס" — only for the active flyer */}
               {isMyFlight && phase === 'flying' && (
                 <motion.button
                   initial={{ opacity: 0, y: 8 }}
