@@ -39,7 +39,7 @@ export function Header() {
             }}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            פעיל 24/7
+            פעיל
           </div>
         </div>
       </div>

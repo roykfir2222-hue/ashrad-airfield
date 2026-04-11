@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Plane, Users, User, Shuffle } from 'lucide-react'
+import { X, Plane, Users, User } from 'lucide-react'
 import type { FlightType } from '@/types/queue'
 import { cn } from '@/utils/cn'
 import type { LucideProps } from 'lucide-react'
@@ -16,7 +16,6 @@ interface JoinModalProps {
 const FLIGHT_TYPES: { value: FlightType; label: string; sublabel: string; icon: React.FC<LucideProps> }[] = [
   { value: 'independent', label: 'עצמאי', sublabel: 'טיסה פרטית', icon: User },
   { value: 'shared', label: 'משותף', sublabel: '12 דקות קבוע', icon: Users },
-  { value: 'both', label: 'גמיש', sublabel: 'כל אחד מהשניים', icon: Shuffle },
 ]
 
 export function JoinModal({ open, onClose, onJoin }: JoinModalProps) {
@@ -121,7 +120,7 @@ export function JoinModal({ open, onClose, onJoin }: JoinModalProps) {
                 {/* Flight type */}
                 <div>
                   <label className="block text-sm text-white/60 mb-2 font-medium">סוג טיסה</label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {FLIGHT_TYPES.map(({ value, label, sublabel, icon: Icon }) => (
                       <button
                         key={value}

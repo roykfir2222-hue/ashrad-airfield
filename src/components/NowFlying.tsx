@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plane, Clock, Users, User } from 'lucide-react'
+import { Plane, Clock, Users, User, CheckCircle } from 'lucide-react'
 import type { QueueEntry } from '@/types/queue'
 
 interface NowFlyingProps {
   entry: QueueEntry | null
   bufferMinutes: number
   onFlightEnd: () => void
+  isMyFlight: boolean
+  onFinishFlight: () => void
 }
 
-export function NowFlying({ entry, bufferMinutes, onFlightEnd }: NowFlyingProps) {
+export function NowFlying({ entry, bufferMinutes, onFlightEnd, isMyFlight, onFinishFlight }: NowFlyingProps) {
   const [secondsLeft, setSecondsLeft] = useState(0)
   const [phase, setPhase] = useState<'flying' | 'buffer' | 'idle'>('idle')
 
@@ -27,7 +29,6 @@ export function NowFlying({ entry, bufferMinutes, onFlightEnd }: NowFlyingProps)
 
     const tick = () => {
       const now = Date.now()
-      const elapsed = now - startedAt
       const flightEnd = startedAt + flightMs
       const bufferEnd = flightEnd + bufferMs
 
@@ -38,7 +39,6 @@ export function NowFlying({ entry, bufferMinutes, onFlightEnd }: NowFlyingProps)
         setPhase('buffer')
         setSecondsLeft(Math.ceil((bufferEnd - now) / 1000))
         if (now >= flightEnd && now < flightEnd + 1000) {
-          // Flight just ended — trigger advance
           onFlightEnd()
         }
       } else {
@@ -133,7 +133,7 @@ export function NowFlying({ entry, bufferMinutes, onFlightEnd }: NowFlyingProps)
                 >
                   {entry.name.charAt(0).toUpperCase()}
                 </div>
-                <div>
+                <div className="flex-1">
                   <p className="text-2xl font-bold text-white tracking-wide">{entry.name}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <TypeIcon className="w-3.5 h-3.5" style={{ color: 'var(--gold)' }} />
@@ -143,6 +143,26 @@ export function NowFlying({ entry, bufferMinutes, onFlightEnd }: NowFlyingProps)
                   </div>
                 </div>
               </div>
+
+              {/* "סיימתי להטיס" button — only for the active flyer during flight */}
+              {isMyFlight && phase === 'flying' && (
+                <motion.button
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={onFinishFlight}
+                  className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm cursor-pointer"
+                  style={{
+                    background: 'rgba(34,197,94,0.15)',
+                    border: '1px solid rgba(34,197,94,0.35)',
+                    color: '#4ade80',
+                    borderRadius: '14px',
+                  }}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  סיימתי להטיס
+                </motion.button>
+              )}
 
               {phase === 'buffer' && (
                 <motion.div

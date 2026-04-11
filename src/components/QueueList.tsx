@@ -1,17 +1,19 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Users, User, Clock } from 'lucide-react'
+import { X, Users, User, Clock, ShieldCheck } from 'lucide-react'
 import type { QueueEntry } from '@/types/queue'
 
 interface QueueListProps {
   entries: QueueEntry[]
   onRemove: (id: string) => void
+  onVerify: (id: string) => void
+  isCurrentUserVerified: boolean
   bufferMinutes: number
   sharedDuration: number
 }
 
-export function QueueList({ entries, onRemove, bufferMinutes, sharedDuration }: QueueListProps) {
+export function QueueList({ entries, onRemove, onVerify, isCurrentUserVerified, bufferMinutes }: QueueListProps) {
   const getEstimatedWait = (index: number) => {
     let totalMins = 0
     for (let i = 0; i < index; i++) {
@@ -23,7 +25,6 @@ export function QueueList({ entries, onRemove, bufferMinutes, sharedDuration }: 
 
   const typeLabel = (e: QueueEntry) => {
     if (e.flight_type === 'shared') return 'משותף'
-    if (e.flight_type === 'both') return 'גמיש'
     return 'עצמאי'
   }
 
@@ -98,7 +99,12 @@ export function QueueList({ entries, onRemove, bufferMinutes, sharedDuration }: 
 
                 {/* Name + type */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-semibold truncate">{entry.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-white font-semibold truncate">{entry.name}</p>
+                    {entry.is_verified && (
+                      <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--gold)' }} />
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <Icon className="w-3 h-3" style={{ color: isShared ? 'var(--gold)' : 'rgba(255,255,255,0.4)' }} />
                     <span className="text-xs" style={{ color: isShared ? 'var(--gold)' : 'rgba(255,255,255,0.4)' }}>
@@ -112,6 +118,25 @@ export function QueueList({ entries, onRemove, bufferMinutes, sharedDuration }: 
                   <Clock className="w-3 h-3" />
                   <span>{waitMins > 0 ? `~${waitMins} דק׳` : 'הבא!'}</span>
                 </div>
+
+                {/* Verify button — only visible to verified users, only for unverified entries */}
+                {isCurrentUserVerified && !entry.is_verified && (
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => onVerify(entry.id)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold flex-shrink-0 cursor-pointer"
+                    style={{
+                      background: 'rgba(201,168,76,0.15)',
+                      border: '1px solid rgba(201,168,76,0.35)',
+                      color: 'var(--gold-light)',
+                    }}
+                    aria-label={`אמת את ${entry.name}`}
+                  >
+                    <ShieldCheck className="w-3 h-3" />
+                    אמת
+                  </motion.button>
+                )}
 
                 {/* Remove button */}
                 <motion.button

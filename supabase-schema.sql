@@ -8,11 +8,12 @@ drop table if exists public.queue_entries;
 create table public.queue_entries (
   id           uuid primary key default gen_random_uuid(),
   name         text not null,
-  flight_type  text not null check (flight_type in ('independent', 'shared', 'both')),
-  duration_min integer not null check (duration_min between 5 and 8),
+  flight_type  text not null check (flight_type in ('independent', 'shared')),
+  duration_min integer not null check (duration_min between 1 and 30),
   position     integer not null,
   status       text not null default 'waiting' check (status in ('waiting', 'flying', 'done')),
   is_active    boolean not null default true,
+  is_verified  boolean not null default false,
   created_at   timestamptz not null default now(),
   started_at   timestamptz,
   finished_at  timestamptz

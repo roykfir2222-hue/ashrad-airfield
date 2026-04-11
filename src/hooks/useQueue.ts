@@ -72,6 +72,8 @@ export function useQueue() {
       .single()
 
     const nextPos = (maxRow?.position ?? 0) + 1
+    // If there was no max row, the queue was empty — first joiner is auto-verified
+    const isFirst = !maxRow
 
     const { data, error } = await supabase
       .from('queue_entries')
@@ -82,19 +84,19 @@ export function useQueue() {
         position: nextPos,
         status: 'waiting',
         is_active: true,
+        is_verified: isFirst,
       })
       .select('id')
       .single()
 
     if (error || !data) throw new Error(error?.message ?? 'Insert failed')
 
-    // Immediately refresh local state — don't wait for the realtime event
     await fetchQueue()
 
     return data.id as string
   }, [supabase, fetchQueue])
 
-  /** Remove a user from the system (self or social delete) */
+  /** Remove a user from the system (self-leave) */
   const leaveQueue = useCallback(async (id: string) => {
     await supabase
       .from('queue_entries')
@@ -109,6 +111,16 @@ export function useQueue() {
       .eq('id', id)
   }, [supabase])
 
+  /** Verify a queue entry (buddy system) */
+  const verifyEntry = useCallback(async (id: string) => {
+    await supabase
+      .from('queue_entries')
+      .update({ is_verified: true })
+      .eq('id', id)
+    await fetchQueue()
+  }, [supabase, fetchQueue])
+
+  /** Auto-advance when time runs out (re-queues independent flyers) */
   const advanceFlight = useCallback(async () => {
     if (!nowFlying) return
 
@@ -138,14 +150,57 @@ export function useQueue() {
         position: nextPos,
         status: 'waiting',
         is_active: true,
+        is_verified: true,
       })
     }
 
     await fetchQueue()
   }, [nowFlying, supabase, fetchQueue])
 
+  /**
+   * "סיימתי להטיס" — user manually ends their flight.
+   * Always re-queues them at the very end (for both independent & shared).
+   * Returns the new entry's id so the caller can update myEntryId.
+   */
+  const finishMyFlight = useCallback(async (entry: QueueEntry): Promise<string> => {
+    const now = new Date().toISOString()
+
+    await supabase
+      .from('queue_entries')
+      .update({ is_active: false, status: 'done', finished_at: now })
+      .eq('id', entry.id)
+
+    const { data: maxRow } = await supabase
+      .from('queue_entries')
+      .select('position')
+      .eq('is_active', true)
+      .order('position', { ascending: false })
+      .limit(1)
+      .single()
+
+    const nextPos = (maxRow?.position ?? 0) + 1
+
+    const { data, error } = await supabase
+      .from('queue_entries')
+      .insert({
+        name: entry.name,
+        flight_type: entry.flight_type,
+        duration_min: entry.duration_min,
+        position: nextPos,
+        status: 'waiting',
+        is_active: true,
+        is_verified: true,
+      })
+      .select('id')
+      .single()
+
+    if (error || !data) throw new Error(error?.message ?? 'Re-queue failed')
+
+    await fetchQueue()
+    return data.id as string
+  }, [supabase, fetchQueue])
+
   const startNextFlight = useCallback(async () => {
-    // Query fresh from DB — avoids stale React state after a just-completed insert
     const { data: freshWaiting } = await supabase
       .from('queue_entries')
       .select('*')
@@ -163,7 +218,6 @@ export function useQueue() {
       .maybeSingle()
 
     let nextEntry = freshWaiting[0]
-    // No-consecutive rule: skip if same name as current flyer
     if (freshFlying && nextEntry.name === freshFlying.name && freshWaiting.length > 1) {
       nextEntry = freshWaiting[1]
     }
@@ -184,7 +238,9 @@ export function useQueue() {
     joinQueue,
     leaveQueue,
     socialDelete,
+    verifyEntry,
     advanceFlight,
+    finishMyFlight,
     startNextFlight,
     BUFFER_MINUTES,
     SHARED_DURATION,
