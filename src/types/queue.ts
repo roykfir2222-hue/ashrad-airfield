@@ -4,7 +4,7 @@ export type EntryStatus = 'waiting' | 'flying' | 'done'
 export interface QueueEntry {
   id: string
   name: string
-  flight_type: FlightType
+  flight_modes: FlightType[]
   duration_min: number
   position: number
   status: EntryStatus

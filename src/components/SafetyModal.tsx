@@ -19,29 +19,39 @@ export function SafetyModal({ open, onClose }: SafetyModalProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
             onClick={onClose}
             className="fixed inset-0 z-40"
-            style={{ background: 'rgba(2,9,23,0.85)', backdropFilter: 'blur(4px)' }}
+            style={{ background: 'rgba(2,9,23,0.88)', backdropFilter: 'blur(6px)' }}
           />
 
-          {/* Modal — same size/position as JoinModal */}
+          {/* Modal — slides up from bottom */}
           <motion.div
             key="safety-modal"
-            initial={{ opacity: 0, scale: 0.85, y: 40 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            className="fixed inset-x-4 bottom-4 z-50 sm:inset-auto sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-md"
+            initial={{ y: '100%', opacity: 0.6 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: '100%', opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 34, mass: 1 }}
+            className="fixed inset-x-0 bottom-0 z-50 sm:inset-auto sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-md sm:px-4"
           >
             <div
-              className="glass-bright rounded-3xl p-7"
+              className="glass-bright p-8 pb-10"
               style={{
-                borderRadius: '28px',
+                borderRadius: '32px 32px 0 0',
                 border: '1px solid rgba(201,168,76,0.45)',
-                boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
+                borderBottom: 'none',
+                boxShadow: '0 -16px 80px rgba(201,168,76,0.15), 0 -4px 40px rgba(0,0,0,0.5)',
               }}
             >
-              {/* Top row: X button */}
+              {/* Drag handle */}
+              <div className="flex justify-center mb-6">
+                <div
+                  className="w-10 h-1 rounded-full"
+                  style={{ background: 'rgba(255,255,255,0.2)' }}
+                />
+              </div>
+
+              {/* X button */}
               <div className="flex justify-end mb-2">
                 <button
                   onClick={onClose}
@@ -57,42 +67,62 @@ export function SafetyModal({ open, onClose }: SafetyModalProps) {
               </div>
 
               {/* Shield icon */}
-              <div className="flex justify-center mb-6">
+              <div className="flex justify-center mb-7">
                 <motion.div
-                  animate={{ scale: [1, 1.06, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  className="w-24 h-24 rounded-3xl flex items-center justify-center"
+                  initial={{ scale: 0.7, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.15, type: 'spring', stiffness: 400, damping: 22 }}
                   style={{
+                    width: 96,
+                    height: 96,
+                    borderRadius: 28,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     background: 'rgba(201,168,76,0.12)',
-                    border: '2px solid rgba(201,168,76,0.45)',
-                    boxShadow: '0 0 40px rgba(201,168,76,0.2)',
+                    border: '2px solid rgba(201,168,76,0.5)',
+                    boxShadow: '0 0 48px rgba(201,168,76,0.25)',
                   }}
                 >
-                  <ShieldCheck className="w-12 h-12" style={{ color: 'var(--gold)' }} />
+                  <motion.div
+                    animate={{ scale: [1, 1.07, 1] }}
+                    transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    <ShieldCheck className="w-12 h-12" style={{ color: 'var(--gold)' }} />
+                  </motion.div>
                 </motion.div>
               </div>
 
-              {/* Main message */}
-              <div className="text-center space-y-2" style={{ direction: 'rtl' }}>
-                <p className="text-white font-bold text-2xl leading-snug">
+              {/* Text */}
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="text-center space-y-3 mb-8"
+                style={{ direction: 'rtl' }}
+              >
+                <p className="text-white font-bold leading-snug" style={{ fontSize: '1.45rem' }}>
                   נא לשמור על כללי הבטיחות
                 </p>
                 <p className="font-semibold text-xl" style={{ color: 'var(--gold-light)' }}>
                   הטסה נעימה ✈
                 </p>
-              </div>
+              </motion.div>
 
-              {/* Confirm button */}
+              {/* CTA */}
               <motion.button
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.28 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={onClose}
-                className="mt-8 w-full py-4 rounded-2xl font-bold text-base cursor-pointer"
+                className="w-full py-4 rounded-2xl font-bold text-base cursor-pointer"
                 style={{
                   background: 'linear-gradient(135deg, var(--gold), #a07830)',
                   color: '#0a1628',
                   border: 'none',
-                  boxShadow: '0 4px 20px rgba(201,168,76,0.35)',
-                  borderRadius: '16px',
+                  boxShadow: '0 4px 24px rgba(201,168,76,0.4)',
+                  borderRadius: '18px',
                 }}
               >
                 הבנתי — בוא נטוס!

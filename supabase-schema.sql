@@ -1,5 +1,5 @@
 -- Ashrad Airfield - Supabase Schema
--- Run this in your Supabase SQL Editor
+-- Run this in your Supabase SQL Editor (full reset)
 
 -- Drop existing table if re-running
 drop table if exists public.queue_entries;
@@ -8,8 +8,8 @@ drop table if exists public.queue_entries;
 create table public.queue_entries (
   id           uuid primary key default gen_random_uuid(),
   name         text not null,
-  flight_type  text not null check (flight_type in ('independent', 'shared')),
-  duration_min integer not null check (duration_min between 1 and 30),
+  flight_modes text[] not null default array['independent'],
+  duration_min integer not null check (duration_min between 1 and 60),
   position     integer not null,
   status       text not null default 'waiting' check (status in ('waiting', 'flying', 'done')),
   is_active    boolean not null default true,
@@ -30,3 +30,27 @@ create policy "Allow all operations" on public.queue_entries
 
 -- Enable Realtime
 alter publication supabase_realtime add table public.queue_entries;
+
+
+-- ============================================================
+-- MIGRATION (if you already have data and want to keep it):
+-- Run these commands instead of the DROP + CREATE above
+-- ============================================================
+
+-- Step 1: Add new column
+-- ALTER TABLE public.queue_entries
+--   ADD COLUMN IF NOT EXISTS flight_modes text[] NOT NULL DEFAULT array['independent'];
+
+-- Step 2: Migrate existing data
+-- UPDATE public.queue_entries
+--   SET flight_modes = ARRAY[flight_type];
+
+-- Step 3: Update duration check (allows up to 60 min for combined modes)
+-- ALTER TABLE public.queue_entries
+--   DROP CONSTRAINT IF EXISTS queue_entries_duration_min_check;
+-- ALTER TABLE public.queue_entries
+--   ADD CONSTRAINT queue_entries_duration_min_check CHECK (duration_min BETWEEN 1 AND 60);
+
+-- Step 4: Drop old column
+-- ALTER TABLE public.queue_entries
+--   DROP COLUMN IF EXISTS flight_type;

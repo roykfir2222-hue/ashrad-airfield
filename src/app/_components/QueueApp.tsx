@@ -75,8 +75,8 @@ export default function QueueApp() {
     }
   }, [nowFlying, waitingQueue, BUFFER_MINUTES])
 
-  const handleJoin = useCallback(async (name: string, type: FlightType, duration: number) => {
-    const id = await joinQueue(name, type, duration)
+  const handleJoin = useCallback(async (name: string, modes: FlightType[], duration: number) => {
+    const id = await joinQueue(name, modes, duration)
     setMyEntryId(id)
     // Show safety modal right after join
     setSafetyModalOpen(true)

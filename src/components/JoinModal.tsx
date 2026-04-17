@@ -5,37 +5,56 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plane, Users, User } from 'lucide-react'
 import type { FlightType } from '@/types/queue'
 import { cn } from '@/utils/cn'
-import type { LucideProps } from 'lucide-react'
 
 interface JoinModalProps {
   open: boolean
   onClose: () => void
-  onJoin: (name: string, type: FlightType, duration: number) => Promise<void>
+  onJoin: (name: string, modes: FlightType[], duration: number) => Promise<void>
 }
 
-const FLIGHT_TYPES: { value: FlightType; label: string; sublabel: string; icon: React.FC<LucideProps> }[] = [
+const FLIGHT_OPTIONS: { value: FlightType; label: string; sublabel: string; icon: React.ElementType }[] = [
   { value: 'independent', label: 'עצמאי', sublabel: 'טיסה פרטית', icon: User },
   { value: 'shared', label: 'משותף', sublabel: '12 דקות קבוע', icon: Users },
 ]
 
 export function JoinModal({ open, onClose, onJoin }: JoinModalProps) {
   const [name, setName] = useState('')
-  const [flightType, setFlightType] = useState<FlightType>('independent')
+  const [selectedModes, setSelectedModes] = useState<FlightType[]>(['independent'])
   const [duration, setDuration] = useState(7)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const isShared = flightType === 'shared'
+  const hasIndependent = selectedModes.includes('independent')
+  const hasShared = selectedModes.includes('shared')
+
+  const toggleMode = (mode: FlightType) => {
+    setSelectedModes(prev => {
+      if (prev.includes(mode)) {
+        // Don't allow deselecting if it's the only one
+        if (prev.length === 1) return prev
+        return prev.filter(m => m !== mode)
+      }
+      return [...prev, mode]
+    })
+  }
+
+  const totalDuration = () => {
+    let total = 0
+    if (hasIndependent) total += duration
+    if (hasShared) total += 12
+    return total
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) { setError('נא להזין שם'); return }
+    if (selectedModes.length === 0) { setError('נא לבחור סוג טיסה'); return }
     setError('')
     setLoading(true)
     try {
-      await onJoin(name.trim(), flightType, isShared ? 12 : duration)
+      await onJoin(name.trim(), selectedModes, totalDuration())
       setName('')
-      setFlightType('independent')
+      setSelectedModes(['independent'])
       setDuration(7)
       onClose()
     } catch {
@@ -63,10 +82,10 @@ export function JoinModal({ open, onClose, onJoin }: JoinModalProps) {
           {/* Modal */}
           <motion.div
             key="modal"
-            initial={{ opacity: 0, scale: 0.85, y: 40 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            initial={{ opacity: 0, y: 60 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 32 }}
             className="fixed inset-x-4 bottom-4 z-50 sm:inset-auto sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-md"
           >
             <div
@@ -117,40 +136,54 @@ export function JoinModal({ open, onClose, onJoin }: JoinModalProps) {
                   {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
                 </div>
 
-                {/* Flight type */}
+                {/* Flight modes — multi-select */}
                 <div>
-                  <label className="block text-sm text-white/60 mb-2 font-medium">סוג טיסה</label>
+                  <label className="block text-sm text-white/60 mb-2 font-medium">
+                    סוג טיסה
+                    <span className="text-white/30 text-xs font-normal mr-1">(ניתן לבחור שניים)</span>
+                  </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {FLIGHT_TYPES.map(({ value, label, sublabel, icon: Icon }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setFlightType(value)}
-                        className={cn(
-                          'flex flex-col items-center gap-1.5 p-3 rounded-xl cursor-pointer transition-all duration-200',
-                        )}
-                        style={{
-                          background: flightType === value
-                            ? 'rgba(201,168,76,0.2)'
-                            : 'rgba(10,22,40,0.5)',
-                          border: flightType === value
-                            ? '1px solid rgba(201,168,76,0.5)'
-                            : '1px solid rgba(255,255,255,0.08)',
-                        }}
-                      >
-                        <Icon className="w-4 h-4" style={{ color: flightType === value ? 'var(--gold)' : 'rgba(255,255,255,0.4)' }} />
-                        <span className="text-xs font-semibold" style={{ color: flightType === value ? 'var(--gold-light)' : 'rgba(255,255,255,0.6)' }}>
-                          {label}
-                        </span>
-                        <span className="text-[10px] text-white/30 text-center leading-tight">{sublabel}</span>
-                      </button>
-                    ))}
+                    {FLIGHT_OPTIONS.map(({ value, label, sublabel, icon: Icon }) => {
+                      const isSelected = selectedModes.includes(value)
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => toggleMode(value)}
+                          className={cn(
+                            'flex flex-col items-center gap-1.5 p-3 rounded-xl cursor-pointer transition-all duration-200 relative',
+                          )}
+                          style={{
+                            background: isSelected
+                              ? 'rgba(201,168,76,0.18)'
+                              : 'rgba(10,22,40,0.5)',
+                            border: isSelected
+                              ? '1.5px solid rgba(201,168,76,0.6)'
+                              : '1px solid rgba(255,255,255,0.08)',
+                          }}
+                        >
+                          {isSelected && (
+                            <span
+                              className="absolute top-1.5 left-1.5 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold"
+                              style={{ background: 'var(--gold)', color: '#0a1628' }}
+                            >
+                              ✓
+                            </span>
+                          )}
+                          <Icon className="w-4 h-4" style={{ color: isSelected ? 'var(--gold)' : 'rgba(255,255,255,0.4)' }} />
+                          <span className="text-xs font-semibold" style={{ color: isSelected ? 'var(--gold-light)' : 'rgba(255,255,255,0.6)' }}>
+                            {label}
+                          </span>
+                          <span className="text-[10px] text-white/30 text-center leading-tight">{sublabel}</span>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
 
-                {/* Duration (independent only) */}
+                {/* Duration slider — visible when independent is selected */}
                 <AnimatePresence>
-                  {!isShared && (
+                  {hasIndependent && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
@@ -158,7 +191,7 @@ export function JoinModal({ open, onClose, onJoin }: JoinModalProps) {
                       transition={{ duration: 0.2 }}
                     >
                       <label className="block text-sm text-white/60 mb-2 font-medium">
-                        משך טיסה: <span style={{ color: 'var(--gold-light)' }}>{duration} דקות</span>
+                        משך טיסה עצמאית: <span style={{ color: 'var(--gold-light)' }}>{duration} דקות</span>
                       </label>
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-white/30">5</span>
@@ -176,6 +209,24 @@ export function JoinModal({ open, onClose, onJoin }: JoinModalProps) {
                     </motion.div>
                   )}
                 </AnimatePresence>
+
+                {/* Total duration summary */}
+                {selectedModes.length > 0 && (
+                  <div
+                    className="flex items-center justify-between px-3 py-2 rounded-xl text-xs"
+                    style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.2)' }}
+                  >
+                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>סה״כ זמן טיסה</span>
+                    <span className="font-bold" style={{ color: 'var(--gold-light)' }}>
+                      {totalDuration()} דקות
+                      {selectedModes.length === 2 && (
+                        <span className="text-white/30 font-normal mr-1">
+                          ({duration} עצמאי + 12 משותף)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
 
                 {/* Submit */}
                 <motion.button

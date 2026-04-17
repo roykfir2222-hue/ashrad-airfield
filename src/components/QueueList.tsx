@@ -14,7 +14,6 @@ interface QueueListProps {
 }
 
 export function QueueList({ entries, onRemove, onVerify, isCurrentUserVerified, bufferMinutes }: QueueListProps) {
-  // Only count verified entries when estimating wait (pending users don't hold a real slot)
   const verifiedEntries = entries.filter(e => e.is_verified)
 
   const getEstimatedWait = (entry: QueueEntry) => {
@@ -27,12 +26,19 @@ export function QueueList({ entries, onRemove, onVerify, isCurrentUserVerified, 
     return totalMins
   }
 
-  const typeLabel = (e: QueueEntry) => e.flight_type === 'shared' ? 'משותף' : 'עצמאי'
-  const TypeIcon = (e: QueueEntry) => e.flight_type === 'shared' ? Users : User
-
-  // Display position counts only verified users
   const verifiedPosition = (entryId: string) =>
     verifiedEntries.findIndex(e => e.id === entryId) + 1
+
+  const getModeLabel = (entry: QueueEntry) => {
+    const labels = entry.flight_modes.map(m => m === 'shared' ? 'משותף' : 'עצמאי')
+    return labels.join(', ')
+  }
+
+  const hasBothModes = (entry: QueueEntry) =>
+    entry.flight_modes.includes('independent') && entry.flight_modes.includes('shared')
+
+  const primaryIsShared = (entry: QueueEntry) =>
+    !entry.flight_modes.includes('independent') && entry.flight_modes.includes('shared')
 
   return (
     <div className="space-y-2">
@@ -50,11 +56,12 @@ export function QueueList({ entries, onRemove, onVerify, isCurrentUserVerified, 
           </motion.div>
         ) : (
           entries.map((entry) => {
-            const Icon = TypeIcon(entry)
             const waitMins = getEstimatedWait(entry)
-            const isShared = entry.flight_type === 'shared'
             const isPending = !entry.is_verified
             const vPos = isPending ? null : verifiedPosition(entry.id)
+            const bothModes = hasBothModes(entry)
+            const isShared = primaryIsShared(entry)
+            const modeLabel = getModeLabel(entry)
 
             return (
               <motion.div
@@ -68,11 +75,15 @@ export function QueueList({ entries, onRemove, onVerify, isCurrentUserVerified, 
                 style={{
                   background: isPending
                     ? 'rgba(30,20,10,0.5)'
+                    : bothModes
+                    ? 'rgba(25,45,85,0.5)'
                     : isShared
                     ? 'rgba(30,58,110,0.35)'
                     : 'rgba(15,32,64,0.5)',
                   border: isPending
                     ? '1px solid rgba(234,179,8,0.2)'
+                    : bothModes
+                    ? '1px solid rgba(201,168,76,0.35)'
                     : isShared
                     ? '1px solid rgba(201,168,76,0.25)'
                     : '1px solid rgba(255,255,255,0.07)',
@@ -121,7 +132,7 @@ export function QueueList({ entries, onRemove, onVerify, isCurrentUserVerified, 
 
                 {/* Name + status */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <p
                       className="font-semibold truncate"
                       style={{ color: isPending ? 'rgba(255,255,255,0.5)' : 'white' }}
@@ -134,7 +145,6 @@ export function QueueList({ entries, onRemove, onVerify, isCurrentUserVerified, 
                   </div>
 
                   {isPending ? (
-                    /* Pending state label */
                     <div className="flex items-center gap-1 mt-0.5">
                       <ShieldAlert className="w-3 h-3" style={{ color: 'rgba(234,179,8,0.6)' }} />
                       <span className="text-xs" style={{ color: 'rgba(234,179,8,0.7)' }}>
@@ -142,11 +152,26 @@ export function QueueList({ entries, onRemove, onVerify, isCurrentUserVerified, 
                       </span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <Icon className="w-3 h-3" style={{ color: isShared ? 'var(--gold)' : 'rgba(255,255,255,0.4)' }} />
-                      <span className="text-xs" style={{ color: isShared ? 'var(--gold)' : 'rgba(255,255,255,0.4)' }}>
-                        {typeLabel(entry)} · {entry.duration_min} דק׳
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      {/* Mode icons + labels */}
+                      {bothModes ? (
+                        <>
+                          <User className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                          <Users className="w-3 h-3" style={{ color: 'var(--gold)' }} />
+                        </>
+                      ) : isShared ? (
+                        <Users className="w-3 h-3" style={{ color: 'var(--gold)' }} />
+                      ) : (
+                        <User className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.4)' }} />
+                      )}
+                      <span
+                        className="text-xs font-medium"
+                        style={{ color: bothModes ? 'var(--gold-light)' : isShared ? 'var(--gold)' : 'rgba(255,255,255,0.4)' }}
+                      >
+                        {modeLabel}
                       </span>
+                      <span className="text-xs text-white/25">·</span>
+                      <span className="text-xs text-white/35">{entry.duration_min} דק׳</span>
                     </div>
                   )}
                 </div>
@@ -159,7 +184,7 @@ export function QueueList({ entries, onRemove, onVerify, isCurrentUserVerified, 
                   </div>
                 )}
 
-                {/* "אשר הגעה" — only visible to verified users, only for pending entries */}
+                {/* Verify button */}
                 {isCurrentUserVerified && isPending && (
                   <motion.button
                     whileHover={{ scale: 1.05 }}

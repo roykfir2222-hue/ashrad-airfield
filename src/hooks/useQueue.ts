@@ -15,7 +15,7 @@ export function buildScheduledQueue(active: QueueEntry[]): QueueEntry[] {
 export function nextSlotType(queue: QueueEntry[]): FlightType {
   let indepSinceShared = 0
   for (let i = queue.length - 1; i >= 0; i--) {
-    if (queue[i].flight_type === 'shared') break
+    if (queue[i].flight_modes.includes('shared')) break
     indepSinceShared++
   }
   return indepSinceShared >= INDEPENDENT_RATIO ? 'shared' : 'independent'
@@ -60,7 +60,7 @@ export function useQueue() {
   /** Add a new user to the queue. Returns the new entry's id. */
   const joinQueue = useCallback(async (
     name: string,
-    flightType: FlightType,
+    flightModes: FlightType[],
     durationMin: number
   ): Promise<string> => {
     const { data: maxRow } = await supabase
@@ -72,15 +72,14 @@ export function useQueue() {
       .single()
 
     const nextPos = (maxRow?.position ?? 0) + 1
-    // If there was no max row, the queue was empty — first joiner is auto-verified
     const isFirst = !maxRow
 
     const { data, error } = await supabase
       .from('queue_entries')
       .insert({
         name,
-        flight_type: flightType,
-        duration_min: flightType === 'shared' ? SHARED_DURATION : durationMin,
+        flight_modes: flightModes,
+        duration_min: durationMin,
         position: nextPos,
         status: 'waiting',
         is_active: true,
@@ -124,7 +123,9 @@ export function useQueue() {
   const advanceFlight = useCallback(async () => {
     if (!nowFlying) return
 
-    const isShared = nowFlying.flight_type === 'shared'
+    const isSharedOnly =
+      nowFlying.flight_modes.includes('shared') &&
+      !nowFlying.flight_modes.includes('independent')
     const now = new Date().toISOString()
 
     await supabase
@@ -132,7 +133,7 @@ export function useQueue() {
       .update({ is_active: false, status: 'done', finished_at: now })
       .eq('id', nowFlying.id)
 
-    if (!isShared) {
+    if (!isSharedOnly) {
       const { data: maxRow } = await supabase
         .from('queue_entries')
         .select('position')
@@ -145,7 +146,7 @@ export function useQueue() {
 
       await supabase.from('queue_entries').insert({
         name: nowFlying.name,
-        flight_type: nowFlying.flight_type,
+        flight_modes: nowFlying.flight_modes,
         duration_min: nowFlying.duration_min,
         position: nextPos,
         status: 'waiting',
@@ -159,7 +160,7 @@ export function useQueue() {
 
   /**
    * "סיימתי להטיס" — user manually ends their flight.
-   * Always re-queues them at the very end (for both independent & shared).
+   * Always re-queues them at the very end.
    * Returns the new entry's id so the caller can update myEntryId.
    */
   const finishMyFlight = useCallback(async (entry: QueueEntry): Promise<string> => {
@@ -184,7 +185,7 @@ export function useQueue() {
       .from('queue_entries')
       .insert({
         name: entry.name,
-        flight_type: entry.flight_type,
+        flight_modes: entry.flight_modes,
         duration_min: entry.duration_min,
         position: nextPos,
         status: 'waiting',
@@ -201,7 +202,6 @@ export function useQueue() {
   }, [supabase, fetchQueue])
 
   const startNextFlight = useCallback(async () => {
-    // Only verified users can be promoted — pending users stay in place until verified
     const { data: freshWaiting } = await supabase
       .from('queue_entries')
       .select('*')

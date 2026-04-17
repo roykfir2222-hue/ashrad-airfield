@@ -66,12 +66,18 @@ export function NowFlying({
     return `${m}:${s}`
   }
 
-  const isShared = entry?.flight_type === 'shared'
-  const TypeIcon = isShared ? Users : User
+  const getModeLabel = (entry: QueueEntry) => {
+    const labels = entry.flight_modes.map(m => m === 'shared' ? 'משותף' : 'עצמאי')
+    return labels.join(' + ')
+  }
+
+  const hasBoth = (entry: QueueEntry) =>
+    entry.flight_modes.includes('independent') && entry.flight_modes.includes('shared')
+
+  const isShared = entry?.flight_modes.includes('shared') && !entry.flight_modes.includes('independent')
 
   return (
     <div className="relative rounded-2xl overflow-hidden" style={{ borderRadius: '24px' }}>
-      {/* Animated gold gradient border */}
       <div
         className="absolute inset-0 rounded-2xl"
         style={{
@@ -120,7 +126,6 @@ export function NowFlying({
               </div>
             )}
 
-            {/* Remove active flyer button — always visible when someone is flying */}
             {entry && phase === 'flying' && (
               <motion.button
                 whileHover={{ scale: 1.1 }}
@@ -165,15 +170,23 @@ export function NowFlying({
                 <div className="flex-1">
                   <p className="text-2xl font-bold text-white tracking-wide">{entry.name}</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <TypeIcon className="w-3.5 h-3.5" style={{ color: 'var(--gold)' }} />
+                    {hasBoth(entry) ? (
+                      <>
+                        <User className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                        <Users className="w-3.5 h-3.5" style={{ color: 'var(--gold)' }} />
+                      </>
+                    ) : isShared ? (
+                      <Users className="w-3.5 h-3.5" style={{ color: 'var(--gold)' }} />
+                    ) : (
+                      <User className="w-3.5 h-3.5" style={{ color: 'var(--gold)' }} />
+                    )}
                     <span className="text-xs text-white/60">
-                      {isShared ? 'טיסה משותפת' : 'טיסה עצמאית'} · {entry.duration_min} דקות
+                      {getModeLabel(entry)} · {entry.duration_min} דקות
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* "סיימתי להטיס" — only for the active flyer */}
               {isMyFlight && phase === 'flying' && (
                 <motion.button
                   initial={{ opacity: 0, y: 8 }}
