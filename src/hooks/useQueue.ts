@@ -1,12 +1,29 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import type { QueueEntry, FlightType } from '@/types/queue'
 
 const BUFFER_MINUTES = 20
 const SHARED_DURATION = 12
 const INDEPENDENT_RATIO = 2
+
+// Normalize a raw DB row: handles both old (flight_type string) and new
+// (flight_modes array) schemas, and guards against null values.
+function normalizeEntry(row: Record<string, unknown>): QueueEntry {
+  let modes: FlightType[]
+
+  if (Array.isArray(row.flight_modes) && row.flight_modes.length > 0) {
+    modes = row.flight_modes as FlightType[]
+  } else if (typeof row.flight_type === 'string') {
+    // backwards-compat: old rows that haven't been migrated yet
+    modes = [row.flight_type as FlightType]
+  } else {
+    modes = ['independent']
+  }
+
+  return { ...row, flight_modes: modes } as QueueEntry
+}
 
 export function buildScheduledQueue(active: QueueEntry[]): QueueEntry[] {
   return [...active].sort((a, b) => a.position - b.position)
@@ -22,42 +39,61 @@ export function nextSlotType(queue: QueueEntry[]): FlightType {
 }
 
 export function useQueue() {
-  const supabase = createClient()
+  // Stable reference — never recreated, so realtime subscription stays alive.
+  const supabase = useRef(createClient()).current
+
   const [queue, setQueue] = useState<QueueEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const fetchQueue = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('queue_entries')
-      .select('*')
-      .eq('is_active', true)
-      .order('position', { ascending: true })
+  // Keep fetchQueue in a ref so the realtime effect never needs it as a dep.
+  const fetchQueueRef = useRef<((_trigger?: unknown) => Promise<void>) | undefined>(undefined)
 
-    if (!error && data) {
-      setQueue(data as QueueEntry[])
+  const fetchQueue = useCallback(async (_trigger?: unknown) => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('queue_entries')
+        .select('*')
+        .eq('is_active', true)
+        .order('position', { ascending: true })
+
+      if (fetchError) throw fetchError
+      if (data) setQueue(data.map(normalizeEntry))
+      setError(null)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[useQueue] fetchQueue failed:', msg)
+      setError(msg)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [supabase])
 
+  // Keep the ref current on every render
+  fetchQueueRef.current = fetchQueue
+
+  // Realtime subscription — runs once; stable because supabase is a ref.
   useEffect(() => {
-    fetchQueue()
+    fetchQueueRef.current?.()
 
     const channel = supabase
-      .channel('queue-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'queue_entries' },
-        () => { fetchQueue() }
-      )
-      .subscribe()
+      .channel('queue-realtime-v2')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'queue_entries' },
+        () => fetchQueueRef.current?.())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'queue_entries' },
+        () => fetchQueueRef.current?.())
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'queue_entries' },
+        () => fetchQueueRef.current?.())
+      .subscribe((status: string) => {
+        console.log('[Realtime] status:', status)
+      })
 
     return () => { supabase.removeChannel(channel) }
-  }, [fetchQueue, supabase])
+  }, [supabase]) // supabase is a stable ref — this runs exactly once
 
   const nowFlying = queue.find(e => e.status === 'flying') ?? null
   const waitingQueue = queue.filter(e => e.status === 'waiting')
 
-  /** Add a new user to the queue. Returns the new entry's id. */
   const joinQueue = useCallback(async (
     name: string,
     flightModes: FlightType[],
@@ -74,7 +110,7 @@ export function useQueue() {
     const nextPos = (maxRow?.position ?? 0) + 1
     const isFirst = !maxRow
 
-    const { data, error } = await supabase
+    const { data, error: insertError } = await supabase
       .from('queue_entries')
       .insert({
         name,
@@ -88,15 +124,15 @@ export function useQueue() {
       .select('id')
       .single()
 
-    if (error || !data) throw new Error(error?.message ?? 'Insert failed')
+    if (insertError || !data) throw new Error(insertError?.message ?? 'Insert failed')
 
     await fetchQueue()
-
     return data.id as string
   }, [supabase, fetchQueue])
 
-  /** Remove a user from the system (self-leave) */
+  // Optimistic update first so UI responds instantly even if realtime is slow.
   const leaveQueue = useCallback(async (id: string) => {
+    setQueue(prev => prev.filter(e => e.id !== id))
     await supabase
       .from('queue_entries')
       .update({ is_active: false, status: 'done', finished_at: new Date().toISOString() })
@@ -104,22 +140,22 @@ export function useQueue() {
   }, [supabase])
 
   const socialDelete = useCallback(async (id: string) => {
+    setQueue(prev => prev.filter(e => e.id !== id))
     await supabase
       .from('queue_entries')
       .update({ is_active: false, status: 'done', finished_at: new Date().toISOString() })
       .eq('id', id)
   }, [supabase])
 
-  /** Verify a queue entry (buddy system) */
   const verifyEntry = useCallback(async (id: string) => {
+    // Optimistic: mark as verified locally right away
+    setQueue(prev => prev.map(e => e.id === id ? { ...e, is_verified: true } : e))
     await supabase
       .from('queue_entries')
       .update({ is_verified: true })
       .eq('id', id)
-    await fetchQueue()
-  }, [supabase, fetchQueue])
+  }, [supabase])
 
-  /** Auto-advance when time runs out (re-queues independent flyers) */
   const advanceFlight = useCallback(async () => {
     if (!nowFlying) return
 
@@ -127,6 +163,8 @@ export function useQueue() {
       nowFlying.flight_modes.includes('shared') &&
       !nowFlying.flight_modes.includes('independent')
     const now = new Date().toISOString()
+
+    setQueue(prev => prev.filter(e => e.id !== nowFlying.id))
 
     await supabase
       .from('queue_entries')
@@ -142,13 +180,11 @@ export function useQueue() {
         .limit(1)
         .single()
 
-      const nextPos = (maxRow?.position ?? 0) + 1
-
       await supabase.from('queue_entries').insert({
         name: nowFlying.name,
         flight_modes: nowFlying.flight_modes,
         duration_min: nowFlying.duration_min,
-        position: nextPos,
+        position: (maxRow?.position ?? 0) + 1,
         status: 'waiting',
         is_active: true,
         is_verified: true,
@@ -158,13 +194,10 @@ export function useQueue() {
     await fetchQueue()
   }, [nowFlying, supabase, fetchQueue])
 
-  /**
-   * "סיימתי להטיס" — user manually ends their flight.
-   * Always re-queues them at the very end.
-   * Returns the new entry's id so the caller can update myEntryId.
-   */
   const finishMyFlight = useCallback(async (entry: QueueEntry): Promise<string> => {
     const now = new Date().toISOString()
+
+    setQueue(prev => prev.filter(e => e.id !== entry.id))
 
     await supabase
       .from('queue_entries')
@@ -179,15 +212,13 @@ export function useQueue() {
       .limit(1)
       .single()
 
-    const nextPos = (maxRow?.position ?? 0) + 1
-
-    const { data, error } = await supabase
+    const { data, error: requeueError } = await supabase
       .from('queue_entries')
       .insert({
         name: entry.name,
         flight_modes: entry.flight_modes,
         duration_min: entry.duration_min,
-        position: nextPos,
+        position: (maxRow?.position ?? 0) + 1,
         status: 'waiting',
         is_active: true,
         is_verified: true,
@@ -195,7 +226,7 @@ export function useQueue() {
       .select('id')
       .single()
 
-    if (error || !data) throw new Error(error?.message ?? 'Re-queue failed')
+    if (requeueError || !data) throw new Error(requeueError?.message ?? 'Re-queue failed')
 
     await fetchQueue()
     return data.id as string
@@ -224,6 +255,12 @@ export function useQueue() {
       nextEntry = freshWaiting[1]
     }
 
+    setQueue(prev => prev.map(e =>
+      e.id === nextEntry.id
+        ? { ...normalizeEntry(nextEntry as Record<string, unknown>), status: 'flying', started_at: new Date().toISOString() }
+        : e
+    ))
+
     await supabase
       .from('queue_entries')
       .update({ status: 'flying', started_at: new Date().toISOString() })
@@ -237,6 +274,7 @@ export function useQueue() {
     waitingQueue,
     nowFlying,
     loading,
+    error,
     joinQueue,
     leaveQueue,
     socialDelete,

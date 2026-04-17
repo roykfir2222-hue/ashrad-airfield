@@ -7,26 +7,52 @@
   --navy-700: #152a54;
   --navy-600: #1e3a6e;
   --navy-500: #2a4d8f;
-  --gold:     #c9a84c;
+  --gold:      #c9a84c;
   --gold-light: #e8c878;
+
+  /* Taste skill: single accent, calibrated saturation */
+  --accent:    #c9a84c;
+  --accent-dim: rgba(201,168,76,0.18);
+
+  /* Emil skill: spring easing for physical feel */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* ── Base ─────────────────────────────────────────────── */
 * {
   box-sizing: border-box;
+}
+
+html {
+  /* Taste skill: optimized text rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   background-color: var(--navy-950);
   color: #f0f4ff;
-  font-family: 'Inter', system-ui, sans-serif;
+  /* Taste skill: Geist instead of Inter for premium feel */
+  font-family: var(--font-geist, 'Inter'), system-ui, sans-serif;
   min-height: 100dvh;
   overflow-x: hidden;
 }
 
+/* Monospace for timers, counters */
+.tabular-nums,
+.font-mono {
+  font-family: var(--font-geist-mono, 'JetBrains Mono', monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Scrollbar ───────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: var(--navy-900); }
 ::-webkit-scrollbar-thumb { background: var(--navy-600); border-radius: 2px; }
 
+/* ── Glass surfaces ──────────────────────────────────── */
 .glass {
   background: rgba(15, 32, 64, 0.6);
   backdrop-filter: blur(16px);
@@ -41,9 +67,39 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
+/* ── Animations ──────────────────────────────────────── */
 @keyframes pulse-glow {
   0%, 100% { box-shadow: 0 0 20px rgba(201,168,76,0.3); }
-  50%       { box-shadow: 0 0 40px rgba(201,168,76,0.6); }
+  50%       { box-shadow: 0 0 44px rgba(201,168,76,0.65); }
 }
 
-.glow-gold { animation: pulse-glow 2s ease-in-out infinite; }
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.glow-gold { animation: pulse-glow 2.2s ease-in-out infinite; }
+
+/* Taste skill: skeleton shimmer instead of flat pulse */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.03) 25%,
+    rgba(255,255,255,0.07) 50%,
+    rgba(255,255,255,0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* Emil skill: hardware-accelerated interactive elements */
+button, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Emil skill: will-change hint on animated containers */
+.motion-safe {
+  will-change: transform;
+  transform: translateZ(0);
+}

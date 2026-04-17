@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { motion } from 'framer-motion'
-import { PlaneTakeoff, Users, LogOut } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { PlaneTakeoff, Users, LogOut, WifiOff, RefreshCw } from 'lucide-react'
 import { Header } from '@/components/Header'
 import { NowFlying } from '@/components/NowFlying'
 import { QueueList } from '@/components/QueueList'
@@ -23,6 +23,7 @@ export default function QueueApp() {
     waitingQueue,
     nowFlying,
     loading,
+    error,
     joinQueue,
     leaveQueue,
     socialDelete,
@@ -34,7 +35,6 @@ export default function QueueApp() {
     SHARED_DURATION,
   } = useQueue()
 
-  // Derive whether current session's user is verified
   const isCurrentUserVerified =
     myEntryId !== null &&
     (
@@ -42,7 +42,7 @@ export default function QueueApp() {
       nowFlying?.id === myEntryId
     )
 
-  // 2-minute TTS warning for the next verified person in queue
+  // 2-minute TTS warning
   useEffect(() => {
     if (ttsTimeoutRef.current) {
       clearTimeout(ttsTimeoutRef.current)
@@ -78,7 +78,6 @@ export default function QueueApp() {
   const handleJoin = useCallback(async (name: string, modes: FlightType[], duration: number) => {
     const id = await joinQueue(name, modes, duration)
     setMyEntryId(id)
-    // Show safety modal right after join
     setSafetyModalOpen(true)
     if (!nowFlying) {
       await startNextFlight()
@@ -103,7 +102,6 @@ export default function QueueApp() {
     await startNextFlight()
   }, [nowFlying, myEntryId, finishMyFlight, startNextFlight])
 
-  // Remove the currently active flyer and promote the next verified person
   const handleRemoveFlyer = useCallback(async () => {
     if (!nowFlying) return
     await leaveQueue(nowFlying.id)
@@ -118,12 +116,43 @@ export default function QueueApp() {
     <div className="min-h-dvh flex flex-col" style={{ background: 'var(--navy-950)' }}>
       <Header />
 
+      {/* Error banner */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            className="w-full max-w-2xl mx-auto px-4 pt-3"
+          >
+            <div
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
+              style={{
+                background: 'rgba(239,68,68,0.12)',
+                border: '1px solid rgba(239,68,68,0.3)',
+                color: '#fca5a5',
+              }}
+            >
+              <WifiOff className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">שגיאת חיבור: {error}</span>
+              <button
+                onClick={() => window.location.reload()}
+                className="flex items-center gap-1 text-xs opacity-70 hover:opacity-100 cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3" />
+                רענן
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <main className="flex-1 w-full max-w-2xl mx-auto px-4 py-6 space-y-6">
 
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
+          transition={{ delay: 0.05, type: 'spring', stiffness: 300, damping: 30 }}
         >
           <NowFlying
             entry={nowFlying}
@@ -138,17 +167,17 @@ export default function QueueApp() {
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 30 }}
           className="glass rounded-2xl p-5"
           style={{ borderRadius: '20px' }}
         >
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4" style={{ color: 'var(--gold)' }} />
-              <h2 className="font-bold text-white text-base">התור</h2>
+              <h2 className="font-bold text-white text-base tracking-tight">התור</h2>
               {waitingQueue.length > 0 && (
                 <span
-                  className="px-2 py-0.5 rounded-full text-xs font-bold"
+                  className="px-2 py-0.5 rounded-full text-xs font-bold tabular-nums"
                   style={{
                     background: 'rgba(201,168,76,0.2)',
                     border: '1px solid rgba(201,168,76,0.4)',
@@ -169,12 +198,15 @@ export default function QueueApp() {
           </div>
 
           {loading ? (
-            <div className="space-y-2">
+            <div className="space-y-2" aria-busy="true">
               {[1, 2, 3].map(i => (
                 <div
                   key={i}
                   className="h-16 rounded-xl animate-pulse"
-                  style={{ background: 'rgba(255,255,255,0.04)' }}
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    animationDelay: `${i * 80}ms`,
+                  }}
                 />
               ))}
             </div>
@@ -198,24 +230,30 @@ export default function QueueApp() {
         className="fixed bottom-6 flex gap-3 z-30"
         style={{ left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 2rem)', maxWidth: '40rem' }}
       >
-        {hasJoined && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleLeave}
-            className="flex items-center justify-center gap-2 px-5 py-4 rounded-2xl font-semibold text-sm cursor-pointer flex-1"
-            style={{
-              background: 'rgba(239,68,68,0.15)',
-              border: '1px solid rgba(239,68,68,0.3)',
-              color: '#f87171',
-              borderRadius: '20px',
-            }}
-          >
-            <LogOut className="w-4 h-4" />
-            יצאתי
-          </motion.button>
-        )}
+        <AnimatePresence>
+          {hasJoined && (
+            <motion.button
+              key="leave"
+              initial={{ opacity: 0, scale: 0.85, x: -10 }}
+              animate={{ opacity: 1, scale: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.85, x: -10 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleLeave}
+              className="flex items-center justify-center gap-2 px-5 py-4 rounded-2xl font-semibold text-sm cursor-pointer flex-1"
+              style={{
+                background: 'rgba(239,68,68,0.15)',
+                border: '1px solid rgba(239,68,68,0.3)',
+                color: '#f87171',
+                borderRadius: '20px',
+                willChange: 'transform',
+              }}
+            >
+              <LogOut className="w-4 h-4" />
+              יצאתי
+            </motion.button>
+          )}
+        </AnimatePresence>
 
         {!hasJoined ? (
           <motion.button
@@ -228,6 +266,7 @@ export default function QueueApp() {
               color: 'white',
               borderRadius: '20px',
               boxShadow: '0 4px 24px rgba(42,77,143,0.4)',
+              willChange: 'transform',
             }}
           >
             <PlaneTakeoff className="w-5 h-5" style={{ color: 'var(--gold)' }} />
@@ -243,19 +282,18 @@ export default function QueueApp() {
               borderRadius: '20px',
             }}
           >
-            ✓ אתה בתור
+            <span style={{ color: 'var(--gold)', fontSize: '0.8rem' }}>✓</span>
+            אתה בתור
           </div>
         )}
       </div>
 
-      {/* Join setup modal */}
       <JoinModal
         open={joinModalOpen}
         onClose={() => setJoinModalOpen(false)}
         onJoin={handleJoin}
       />
 
-      {/* Safety modal — shown immediately after joining */}
       <SafetyModal
         open={safetyModalOpen}
         onClose={() => setSafetyModalOpen(false)}
